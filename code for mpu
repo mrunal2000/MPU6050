@@ -1,3 +1,6 @@
+#include <SD.h>
+#include <SPI.h>
+#include <DS3231.h>
 #include <Wire.h>
 
 long accelX, accelY, accelZ;
@@ -97,3 +100,58 @@ void printData() {
   Serial.print("roll");
 }
 }
+File myFile;
+DS3231  rtc(SDA, SCL);
+int pinCS = 53; // Pin 10 on Arduino Uno
+void setup() {
+    
+  Serial.begin(9600);
+  pinMode(pinCS, OUTPUT);
+  
+  // SD Card Initialization
+  if (SD.begin())
+  {
+    Serial.println("SD card is ready to use.");
+  } else
+  {
+    Serial.println("SD card initialization failed");
+    return;
+  }
+  rtc.begin();    
+}
+void loop() {
+  Serial.print(rtc.getTimeStr());
+  Serial.print(",");
+  Serial.println(int(rtc.getData());
+ 
+  myFile = SD.open("test.txt", FILE_WRITE);
+  if (myFile) {    
+    myFile.print(rtc.getTimeStr());
+    myFile.print(",");    
+    myFile.println(int(rtc.getData);
+    Serial.print(rtc.getGyro (deg)());
+
+ myFile.print(rtc.getrotX());
+
+  myFile.print(rtc.getrotY());
+
+  myFile.print(rtc.getrotZ());
+  myFile.print(rtc.getAccel (g)());
+
+  myFile.print(rtc.getgForceX());
+ 
+  myFile.print(rtc.getgForceY());
+
+  myFile.println(rtc.getgForceZ);
+  myFile.print(rtc.getyaw());
+  myFile.print(rtc.getpitch());
+  myFile.print(rtc.getroll());
+    myFile.close(); // close the file
+  }
+  // if the file didn't open, print an error:
+  else {
+    Serial.println("error opening test.txt");
+  }
+  delay(3000);
+}
+
