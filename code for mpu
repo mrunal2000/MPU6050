@@ -87,3 +87,4 @@ void printData() {
   Serial.print(" Z=");
   Serial.println(gForceZ);
 }
+}
