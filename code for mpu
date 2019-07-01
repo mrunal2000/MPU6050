@@ -71,6 +71,12 @@ void processGyroData() {
   rotZ = gyroZ / 131.0;
 }
 
+void processyawpitchrolldata(){
+yaw = 180 * atan (gforceZ/sqrt(gforceX*gforceX + gforceZ*gforceZ))/M_PI;
+roll = atan2(gforceY, gforceZ)
+pitch = atan2(-gforceX, sqrt(gforceY*gforceY + gforceZ*gforceZ))
+}
+
 void printData() {
   Serial.print("Gyro (deg)");
   Serial.print(" X=");
@@ -86,5 +92,8 @@ void printData() {
   Serial.print(gForceY);
   Serial.print(" Z=");
   Serial.println(gForceZ);
+  Serial.print("yaw");
+  Serial.print("pitch");
+  Serial.print("roll");
 }
 }
