@@ -1,104 +1,111 @@
 #include <SD.h>
 #include <SPI.h>
-#include <DS3231.h>
-#include <Wire.h>
+#include<Wire.h>
 
-long accelX, accelY, accelZ;
-float gForceX, gForceY, gForceZ;
-
-long gyroX, gyroY, gyroZ;
-float rotX, rotY, rotZ;
-
+double accelX,accelY,accelZ,temperature,gyroX,gyroY,gyroZ,gyro_x_cal,gyro_y_cal,gyro_z_cal; 
+uint32_t timer;.
+double roll, pitch ,yaw; //These are the angles in the complementary filter
+float rollangle,pitchangle;
+int cal_int;
 void setup() {
-  Serial.begin(9600);
+  // Set up MPU 6050:
+  Serial.begin(115200);
   Wire.begin();
-  setupMPU();
+
+  setupMPU();   
+  Serial.println("Calibrating Gyroscope......");
+  for(cal_int=1;cal_int<=2000;cal_int++)
+  { 
+   recordRegisters();
+   gyro_x_cal += gyroX;
+   gyro_y_cal  += gyroY ;
+   gyro_z_cal += gyroZ;
+  }
+  Serial.println("Calibration Done..!!!");
+  gyro_x_cal /= 2000;
+  gyro_y_cal /= 2000;
+  gyro_z_cal /= 2000;
+  
+  //start a timer
+  timer = micros();
 }
 
-
 void loop() {
-  recordAccelRegisters();
-  recordGyroRegisters();
-  printData();
-  delay(100);
+//Now begins the main loop. 
+  //Collect raw data from the sensor.
+  recordRegisters();
+  gyroX = gyroX / 65.5;
+  gyroY = gyroY / 65.5;
+  gyroZ = gyroZ / 65.5;
+
+  accelX = accelX / 4096.0;
+  accelY = accelY / 4096.0; 
+  accelZ= accelZ / 4096.0;
+  
+  double dt = (double)(micros() - timer) / 1000000; 
+  timer = micros(); 
+ 
+  rollangle=atan2(accelY,accelZ)*180/PI; // FORMULA FOUND ON INTERNET
+  pitchangle=atan2(accelX,sqrt(accelY*accelY+accelZ*accelZ))*180/PI; //FORMULA FOUND ON INTERNET
+
+  
+  
+
+  
+  roll = 0.99 * (roll+ gyroX * dt) + 0.01 * rollangle; // Calculate the angle using a Complimentary filter
+  pitch = 0.99 * (pitch + gyroY * dt) + 0.01 * pitchangle; 
+  yaw=gyroZ;
+  
+  
+  Serial.print("roll  ");
+  Serial.print(roll);
+  Serial.print("   pitch  ");
+  Serial.print(pitch);
+  Serial.print("   yaw    ");
+  Serial.println(yaw);
+
 }
 
 void setupMPU(){
-  Wire.beginTransmission(0b1101000); //This is the I2C address of the MPU 
-  Wire.write(0x6B); //Accessing the register 6B - Power Management 
-  Wire.write(0b00000000); //Setting SLEEP register to 0. 
+  Wire.beginTransmission(0b1101000); //This is the I2C address of the MPU (b1101000/b1101001 for AC0 low/high datasheet sec. 9.2)
+  Wire.write(0x6B); //Accessing the register 6B - Power Management (Sec. 4.28)
+  Wire.write(0b00000000); //Setting SLEEP register to 0. (Required; see Note on p. 9)
   Wire.endTransmission();  
   Wire.beginTransmission(0b1101000); //I2C address of the MPU
-  Wire.write(0x1B); //Accessing the register 1B - Gyroscope Configuration
-  Wire.write(0x00000000); //Setting the gyro to full scale +/- 250deg./s 
+  Wire.write(0x1B); //Accessing the register 1B - Gyroscope Configuration (Sec. 4.4) 
+  Wire.write(0x08); //Setting the gyro to full scale +/- 500deg./s 
   Wire.endTransmission(); 
   Wire.beginTransmission(0b1101000); //I2C address of the MPU
-  Wire.write(0x1C); //Accessing the register 1C - Acccelerometer Configuration 
-  Wire.write(0b00000000); //Setting the accel to +/- 2g
+  Wire.write(0x1C); //Accessing the register 1C - Acccelerometer Configuration (Sec. 4.5) 
+  Wire.write(0x10); //Setting the accel to +/- 8g
   Wire.endTransmission(); 
+  
+  Wire.beginTransmission(0b1101000);                                      //Start communication with the address found during search
+  Wire.write(0x1A);                                                          //We want to write to the CONFIG register (1A hex)
+  Wire.write(0x03);                                                          //Set the register bits as 00000011 (Set Digital Low Pass Filter to ~43Hz)
+  Wire.endTransmission();                                                    //End the transmission with the gyro    
 }
-
-void recordAccelRegisters() {
+void recordRegisters() {
   Wire.beginTransmission(0b1101000); //I2C address of the MPU
   Wire.write(0x3B); //Starting register for Accel Readings
   Wire.endTransmission();
-  Wire.requestFrom(0b1101000,6); //Request Accel Registers (3B - 40)
-  while(Wire.available() < 6);
+  Wire.requestFrom(0b1101000,14); //Request Accel Registers (3B - 40)
+  while(Wire.available() < 14);
   accelX = Wire.read()<<8|Wire.read(); //Store first two bytes into accelX
   accelY = Wire.read()<<8|Wire.read(); //Store middle two bytes into accelY
   accelZ = Wire.read()<<8|Wire.read(); //Store last two bytes into accelZ
-  processAccelData();
-}
-
-void processAccelData(){
-  gForceX = accelX / 16384.0;
-  gForceY = accelY / 16384.0; 
-  gForceZ = accelZ / 16384.0;
-}
-
-void recordGyroRegisters() {
-  Wire.beginTransmission(0b1101000); //I2C address of the MPU
-  Wire.write(0x43); //Starting register for Gyro Readings
-  Wire.endTransmission();
-  Wire.requestFrom(0b1101000,6); //Request Gyro Registers (43 - 48)
-  while(Wire.available() < 6);
+  temperature=Wire.read()<<8|Wire.read();
   gyroX = Wire.read()<<8|Wire.read(); //Store first two bytes into accelX
   gyroY = Wire.read()<<8|Wire.read(); //Store middle two bytes into accelY
   gyroZ = Wire.read()<<8|Wire.read(); //Store last two bytes into accelZ
-  processGyroData();
-}
 
-void processGyroData() {
-  rotX = gyroX / 131.0;
-  rotY = gyroY / 131.0; 
-  rotZ = gyroZ / 131.0;
-}
-
-void processyawpitchrolldata(){
-yaw = 180 * atan (gforceZ/sqrt(gforceX*gforceX + gforceZ*gforceZ))/M_PI;
-roll = atan2(gforceY, gforceZ)
-pitch = atan2(-gforceX, sqrt(gforceY*gforceY + gforceZ*gforceZ))
-}
-
-void printData() {
-  Serial.print("Gyro (deg)");
-  Serial.print(" X=");
-  Serial.print(rotX);
-  Serial.print(" Y=");
-  Serial.print(rotY);
-  Serial.print(" Z=");
-  Serial.print(rotZ);
-  Serial.print(" Accel (g)");
-  Serial.print(" X=");
-  Serial.print(gForceX);
-  Serial.print(" Y=");
-  Serial.print(gForceY);
-  Serial.print(" Z=");
-  Serial.println(gForceZ);
-  Serial.print("yaw");
-  Serial.print("pitch");
-  Serial.print("roll");
-}
+  if(cal_int == 2000)
+  {
+    gyroX -= gyro_x_cal;
+    gyroY -= gyro_y_cal;
+    gyroZ -= gyro_z_cal;
+   
+  }
 }
 File myFile;
 DS3231  rtc(SDA, SCL);
@@ -128,21 +135,20 @@ void loop() {
   if (myFile) {    
     myFile.print(rtc.getTimeStr());
     myFile.print(",");    
-    myFile.println(int(rtc.getData);
-    Serial.print(rtc.getGyro (deg)());
+   
+  
+ myFile.print(rtc.getaccelX());
 
- myFile.print(rtc.getrotX());
+  myFile.print(rtc.getaccelY());
 
-  myFile.print(rtc.getrotY());
+  myFile.print(rtc.getaccelZ());
 
-  myFile.print(rtc.getrotZ());
-  myFile.print(rtc.getAccel (g)());
 
-  myFile.print(rtc.getgForceX());
+  myFile.print(rtc.getgyroX());
  
-  myFile.print(rtc.getgForceY());
+  myFile.print(rtc.getgyroY());
 
-  myFile.println(rtc.getgForceZ);
+  myFile.println(rtc.getgyroZ);
   myFile.print(rtc.getyaw());
   myFile.print(rtc.getpitch());
   myFile.print(rtc.getroll());
